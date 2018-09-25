@@ -1,0 +1,121 @@
+ Vagrant.configure("2") do |config|
+  config.hostmanager.enabled = true
+  config.vm.box = "ubuntu/xenial64"
+  config.vm.synced_folder "vpro_app", "/root"
+  config.vm.network 'public_network'
+
+############################################ INSTALLING CI SERVER ###############################################################################
+  config.vm.define "ci" do |build|
+   build.vm.hostname = 'build.com'
+   build.vm.network "private_network", ip: "192.168.10.10"
+   build.vm.provision :shell, inline: <<-SHELL
+   sudo sed -i 's/passwordAuthentication no/passwordAuthentication yes'/ /etc/ssh/sshd_config
+   cd /root
+   sudo apt install python2.7 -y
+   sudo apt update
+   sudo apt install python-pip -y
+   sudo pip install --upgrade pip
+   sudo pip install fabric
+   fab ciserver
+   SHELL
+end
+
+
+############################################### INSTALLING APPLICATION SERVER ###################################################################
+ config.vm.define "app" do |app|
+    app.vm.hostname = 'app.com'
+    app.vm.network "private_network", ip: "192.168.10.11"
+    app.vm.provision :shell, inline: <<-SHELL
+    sudo sed -i 's/passwordAuthentication no/passwordAuthentication yes'/ /etc/ssh/sshd_config
+
+    cd /root
+    sudo apt install python2.7 -y
+    sudo apt update
+    sudo apt install python-pip -y
+    sudo pip install --upgrade pip
+    sudo pip install fabric
+    fab appserver
+
+    SHELL
+end
+
+
+
+############################################# INSTALLING DATABASE SERVER ######################################################################
+  config.vm.define "db" do |db|
+    db.vm.hostname = 'db.com'
+    db.vm.network "private_network", ip: "192.168.10.12"
+    db.vm.provision :shell, inline: <<-SHELL
+    cd /root
+    sudo sed -i 's/passwordAuthentication no/passwordAuthentication yes/' /etc/ssh/sshd_config
+    sudo systemctl restart ssh
+    sudo apt install python2.7 -y
+    sudo apt update
+    sudo apt list --upgrade
+    sudo apt install python-pip -y
+    sudo pip install --upgrade pip
+    sudo pip install fabric
+    fab db_server
+
+    SHELL
+end
+
+
+########################################## INSTALLING LOADBALANCER ############################################################################
+  config.vm.define "lb" do |lb|
+    	lb.vm.hostname = 'lb.com'
+        lb.vm.network "private_network", ip: "192.168.10.13"
+    	lb.vm.provision :shell, inline: <<-SHELL
+      cd /root
+    sudo sed -i 's/passwordAuthentication no/passwordAuthentication yes'g/ /etc/ssh/sshd_config
+    sudo systemctl restart ssh
+    sudo apt install python2.7 -y
+    sudo apt update
+    sudo apt list --upgrade
+    sudo apt install python-pip -y
+    sudo pip install --upgrade pip
+    sudo pip install fabric
+    fab lb
+SHELL
+end
+
+############################################# INSTALLING RABBIT MQ SERVER #####################################################################
+  config.vm.define "RMQ" do |rmq|
+        rmq.vm.hostname = 'rmq.com'
+        rmq.vm.network "private_network", ip: "192.168.10.14"
+ 	rmq.vm.provision :shell, inline: <<-SHELL
+         cd /root
+    sudo sed -i 's/passwordAuthentication no/passwordAuthentication yes'g/ /etc/ssh/sshd_config
+    sudo systemctl restart ssh
+    sudo apt install python2.7 -y
+    sudo apt update
+    sudo apt list --upgrade
+    sudo apt install python-pip -y
+    sudo pip install --upgrade pip
+    sudo pip install fabric
+    fab rabbitmq
+SHELL
+end
+
+
+####################################### INSTALLING  MEMCACHE SERVER ###########################################################################
+  config.vm.define "memcache" do |memcache|
+    memcache.vm.hostname = 'memcache.com'
+    memcache.vm.network "private_network", ip: "192.168.10.15"
+    memcache.vm.provision :shell, inline: <<-SHELL
+    cd /root
+    sudo sed -i 's/passwordAuthentication no/passwordAuthentication yes'g/ /etc/ssh/sshd_config
+    sudo systemctl restart ssh
+    sudo apt install python2.7 -y
+    sudo apt update
+    sudo apt list --upgrade
+    sudo apt install python-pip -y
+    sudo pip install --upgrade pip
+    sudo pip install fabric
+    fab memcache
+SHELL
+end
+end
+
+
+
