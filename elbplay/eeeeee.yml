@@ -1,0 +1,120 @@
+---
+- hosts: localhost
+  connection: localhost
+  remote_user: root
+  gather_facts: false
+  vars_files:
+    - awscreds 
+  tasks:
+    - name: Creating Security Group
+      ec2_group:
+        name: web02-sg
+        description: Rules for allowing Traffic on port 22 and 80
+        region: "{{region}}"
+        aws_access_key: "{{access_id}}"
+        aws_secret_key: "{{secret_key}}"
+        rules:
+          - proto: tcp
+            from_port: 8080
+            to_port: 8080
+            cidr_ip: 0.0.0.0/0
+          - proto: tcp
+            from_port: 22
+            to_port: 22
+            cidr_ip: 0.0.0.0/0
+        rules_egress:
+          - proto: all
+            cidr_ip: 0.0.0.0/0
+    
+    - name: create a web02 key
+      ec2_key: 
+        name: web02key
+        aws_access_key: "{{access_id}}"
+        aws_secret_key: "{{secret_key}}"
+        region: "{{region}}"
+      register: web02key
+
+    - debug: 
+        msg: "{{web02key.key.private_key}}"
+      ignore_errors: true
+
+
+    - name: save private key
+      copy:
+        content: "{{web02key.key.private_key}}\n"
+        dest: "./web02key.pem"
+        mode: 0600
+      when: web02key.changed
+
+
+    - name: Creating web02 Instance
+      ec2:
+         key_name: web02key
+         region: "{{region}}"
+         instance_type: t2.micro
+         aws_access_key: "{{access_id}}"
+         aws_secret_key: "{{secret_key}}"
+         image: "{{ami_id}}"
+         wait: yes
+         wait_timeout: 500
+         instance_tags:
+           Name: web02
+           owner: admin
+         exact_count: 1
+         count_tag:
+           Name: web02
+           Owner: admin
+         monitoring: no
+         vpc_subnet_id: "{{vpc_subnet_id}}"
+         assign_public_ip: yes
+         group: web02-sg
+      register: ec2_out
+
+    - debug: 
+        msg: "{{ec2_out.instances[0].public_ip}}"
+    - name: wait for SSH to comeup
+      wait_for: host={{ec2_out.instances[0].public_ip}} port=22 delay=60 timeout=320 state=started
+
+
+    - name: add server ip addresses to hosts group
+      add_host:
+        hostname: web02
+        ansible_ssh_host: "{{ec2_out.instances[0].public_ip}}"
+        ansible_ssh_user: ubuntu
+        ansible_ssh_private_key_file: web02key
+        ansible_python_interpreter: /usr/bin/python2.7
+        groups: webserver
+
+
+- name: configure the webservers
+  hosts: web02
+  remote_user: ubuntu
+  become: True
+  become_method: sudo
+  gather_facts: False
+  tasks:
+    - name: install python2.7
+      raw: test -e /usr/bin/python || (apt -y update && apt install -y python-minimal)
+
+    - name: installing python depencencies
+      apt:
+        name: "{{item}}"
+        state: latest
+      with_items:
+         - python-pip
+         - python-dev
+
+
+    - name: installing httpd package
+      apt: 
+        name: apache2 
+        state: installed
+    - name: copy index.html
+      copy: 
+        src: index.html 
+        dest: /var/www/html/index.html
+    - name: start apache2 service
+      service: 
+        name: httpd 
+        state: started
+
